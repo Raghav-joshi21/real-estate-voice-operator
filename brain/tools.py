@@ -9,6 +9,7 @@ from notion.client import lookup_client as notion_lookup_client
 from notion.client import lookup_service as notion_lookup_service
 from notion.client import create_client as notion_create_client
 from llm.orchestrator import handle_send_invoice
+from dashboard.events import emit_notion_update
 
 log = logging.getLogger(__name__)
 
@@ -51,13 +52,22 @@ async def _handle_lookup_client(input_data: dict) -> dict:
 
 
 async def _handle_create_client(input_data: dict) -> dict:
-    """Add a new client to Notion."""
+    """Add a new client to Notion and notify dashboard."""
     name = input_data.get("name", "")
     email = input_data.get("email", "")
     if not name or not email:
         return {"error": "name and email are required"}
 
     result = await notion_create_client(name, email)
+
+    if result.get("created"):
+        emit_notion_update(
+            action="created",
+            entity_type="client",
+            name=name,
+            details={"email": email},
+        )
+
     return result
 
 

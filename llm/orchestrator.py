@@ -9,8 +9,7 @@ Email sending flow:
 import asyncio
 import datetime
 import logging
-import os
-import subprocess
+import time
 from pathlib import Path
 
 from server.config import (
@@ -26,17 +25,17 @@ from llm.prompts import SUCCESS_MESSAGES, ERROR_MESSAGE
 from pdf_generator.invoice import generate_invoice_pdf
 from pdf_generator.templates import format_amount, format_date
 from email_drafter.drafter import draft_email
+from dashboard.events import (
+    emit_step_start, emit_step_done, emit_error, track_invoice,
+)
 
 log = logging.getLogger(__name__)
 
-# Directory where PDFs are saved locally
 _GENERATED_DIR = Path(__file__).parent.parent / "generated_files"
 _GENERATED_DIR.mkdir(exist_ok=True)
 
-# Path to the sendmail_skill script
 _SENDMAIL_SCRIPT = Path(__file__).parent.parent / "scripts" / "sendmail_skill" / "send-gmail.js"
 
-# ── Invoice counter (in-memory for hackathon) ─────────────────
 _invoice_counter = 1000
 
 
@@ -50,38 +49,23 @@ def _next_invoice_number() -> str:
 # ── sendmail_skill caller ─────────────────────────────────────
 
 async def _send_via_sendmail_skill(
-    to: str,
-    subject: str,
-    body: str,
-    pdf_path: str | None = None,
+    to: str, subject: str, body: str, pdf_path: str | None = None,
 ) -> bool:
-    """Call the Node.js sendmail_skill script to send email via Chrome/Gmail.
-
-    Requires Chrome running with --remote-debugging-port=CHROME_DEBUG_PORT.
-    Returns True on success.
-    """
     if not _SENDMAIL_SCRIPT.exists():
         log.error(f"sendmail_skill not found at {_SENDMAIL_SCRIPT}")
         return False
 
-    cmd = [
-        "node", str(_SENDMAIL_SCRIPT),
-        "--to", to,
-        "--subject", subject,
-        "--body", body,
-    ]
+    cmd = ["node", str(_SENDMAIL_SCRIPT), "--to", to, "--subject", subject, "--body", body]
     if pdf_path and Path(pdf_path).exists():
         cmd += ["--file", pdf_path]
     if CHROME_DEBUG_PORT != 9222:
         cmd += ["--port", str(CHROME_DEBUG_PORT)]
 
-    log.info(f"sendmail_skill: sending to {to} | subject: {subject}")
+    log.info(f"sendmail_skill: sending to {to}")
 
     try:
         proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=90)
         out = stdout.decode().strip()
@@ -92,7 +76,6 @@ async def _send_via_sendmail_skill(
             log.warning(f"sendmail_skill stderr: {err}")
 
         if proc.returncode == 0 and "SUCCESS" in out:
-            log.info(f"Email sent successfully to {to}")
             return True
         else:
             log.error(f"sendmail_skill failed (exit {proc.returncode}): {err or out}")
@@ -119,7 +102,7 @@ async def handle_send_invoice(params: dict) -> PipelineResult:
     except Exception as exc:
         return PipelineResult(success=False, message=_err(lang), error=str(exc))
 
-    # ── Step 0: Notion lookup (best-effort) ───────────────────
+    # ── Step 0: Notion lookup ─────────────────────────────────
     client_data = None
     service_data = None
 
@@ -131,13 +114,10 @@ async def handle_send_invoice(params: dict) -> PipelineResult:
     except Exception as exc:
         log.warning(f"Notion lookup skipped: {exc}")
 
-    # Resolve email
     client_email = p.client_email or (client_data or {}).get("E-pasts", "")
     if not client_email:
-        return PipelineResult(
-            success=False, message=_err(lang),
-            error=f"No email found for '{p.client_name}'",
-        )
+        emit_error(f"No email found for '{p.client_name}'")
+        return PipelineResult(success=False, message=_err(lang), error=f"No email found for '{p.client_name}'")
 
     # Resolve amounts
     unit_price = p.amount
@@ -147,27 +127,25 @@ async def handle_send_invoice(params: dict) -> PipelineResult:
 
     if service_data:
         unit_price = service_data.get("Likme (EUR)", 0) or p.amount
-        vat_rate   = service_data.get("PVN likme (%)", 0) or 0.0
-        unit       = service_data.get("Mērvienība", "")
+        vat_rate = service_data.get("PVN likme (%)", 0) or 0.0
+        unit = service_data.get("Mērvienība", "")
         service_desc = service_data.get("Pakalpojums", service_desc)
 
-    subtotal   = round(p.quantity * unit_price, 2)
+    subtotal = round(p.quantity * unit_price, 2)
     vat_amount = round(subtotal * vat_rate, 2)
-    total      = round(subtotal + vat_amount, 2)
+    total = round(subtotal + vat_amount, 2)
 
     line_items = [LineItem(
-        description=service_desc,
-        quantity=p.quantity,
-        unit=unit,
-        unit_price=unit_price,
-        amount=subtotal,
+        description=service_desc, quantity=p.quantity, unit=unit,
+        unit_price=unit_price, amount=subtotal,
     )]
 
     invoice_number = _next_invoice_number()
     date_str = format_date(lang)
 
     # ── Step 1: Generate PDF ──────────────────────────────────
-    log.info(f"[{invoice_number}] Generating PDF...")
+    emit_step_start("pdf_generation", "PDF Generation")
+    t0 = time.time()
     try:
         data = InvoiceData(
             invoice_number=invoice_number,
@@ -179,60 +157,59 @@ async def handle_send_invoice(params: dict) -> PipelineResult:
             client_bank=client_data.get("Banka", "") if client_data else "",
             client_iban=client_data.get("IBAN", "") if client_data else "",
             payment_terms=client_data.get("Apmaksas termiņš", "") if client_data else "",
-            line_items=line_items,
-            subtotal=subtotal,
-            vat_rate=vat_rate,
-            vat_amount=vat_amount,
-            total=total,
-            amount=total,
-            property_id=p.property_id,
-            language=lang,
-            date=date_str,
-            company_name=COMPANY_NAME,
-            company_reg_nr=COMPANY_REG_NR,
-            company_vat_nr=COMPANY_VAT_NR,
-            company_address=COMPANY_ADDRESS,
-            company_bank=COMPANY_BANK,
-            company_iban=COMPANY_IBAN,
-            company_phone=COMPANY_PHONE,
-            notes=p.notes,
+            line_items=line_items, subtotal=subtotal, vat_rate=vat_rate,
+            vat_amount=vat_amount, total=total, amount=total,
+            property_id=p.property_id, language=lang, date=date_str,
+            company_name=COMPANY_NAME, company_reg_nr=COMPANY_REG_NR,
+            company_vat_nr=COMPANY_VAT_NR, company_address=COMPANY_ADDRESS,
+            company_bank=COMPANY_BANK, company_iban=COMPANY_IBAN,
+            company_phone=COMPANY_PHONE, notes=p.notes,
         )
         pdf_bytes = generate_invoice_pdf(data)
-        log.info(f"[{invoice_number}] PDF generated ({len(pdf_bytes):,} bytes)")
+        emit_step_done("pdf_generation", "PDF Generation", f"{len(pdf_bytes):,} bytes", int((time.time() - t0) * 1000))
     except Exception as exc:
-        log.error(f"PDF generation failed: {exc}", exc_info=True)
+        emit_error(f"PDF generation failed: {exc}")
         return PipelineResult(success=False, message=_err(lang), error=f"PDF error: {exc}")
 
-    # ── Step 2: Save PDF locally ──────────────────────────────
+    # ── Step 2: Save PDF ──────────────────────────────────────
     pdf_filename = f"invoice_{invoice_number}.pdf"
     pdf_path = str(_GENERATED_DIR / pdf_filename)
     try:
         with open(pdf_path, "wb") as f:
             f.write(pdf_bytes)
-        log.info(f"[{invoice_number}] PDF saved: {pdf_path}")
     except Exception as exc:
         log.error(f"PDF save failed: {exc}")
         pdf_path = None
 
     # ── Step 3: Draft email ───────────────────────────────────
-    log.info(f"[{invoice_number}] Drafting email...")
+    emit_step_start("email_draft", "Draft Email")
+    t0 = time.time()
     try:
         email_params = {**params, "client_email": client_email, "amount": total, "invoice_number": invoice_number}
         email = draft_email("invoice", email_params)
+        emit_step_done("email_draft", "Draft Email", f"To: {client_email}", int((time.time() - t0) * 1000))
     except Exception as exc:
-        log.error(f"Email draft failed: {exc}", exc_info=True)
+        emit_error(f"Email draft failed: {exc}")
         return PipelineResult(success=False, message=_err(lang), error=f"Email error: {exc}")
 
     # ── Step 4: Send via sendmail_skill ───────────────────────
-    log.info(f"[{invoice_number}] Sending email to {client_email} via sendmail_skill...")
+    emit_step_start("email_send", "Send Email", f"via Gmail to {client_email}")
+    t0 = time.time()
     sent = await _send_via_sendmail_skill(
-        to=client_email,
-        subject=email.subject,
-        body=email.body,
-        pdf_path=pdf_path,
+        to=client_email, subject=email.subject, body=email.body, pdf_path=pdf_path,
     )
+    send_ms = int((time.time() - t0) * 1000)
 
-    # ── Step 5: Build result ──────────────────────────────────
+    if sent:
+        emit_step_done("email_send", "Send Email", f"Delivered to {client_email}", send_ms)
+    else:
+        emit_step_done("email_send", "Send Email", "FAILED — check Chrome", send_ms)
+
+    # ── Step 5: Track stats ───────────────────────────────────
+    if sent:
+        track_invoice(invoice_number, total, data.client_name)
+
+    # ── Step 6: Build result ──────────────────────────────────
     tmpl = SUCCESS_MESSAGES["send_invoice"].get(lang, SUCCESS_MESSAGES["send_invoice"]["en"])
     message = tmpl.format(
         invoice_number=invoice_number,
@@ -243,12 +220,7 @@ async def handle_send_invoice(params: dict) -> PipelineResult:
         suffix = {"lv": " E-pasts nav nosūtīts.", "ru": " Письмо не отправлено.", "en": " Email could not be sent — check Chrome is open."}
         message += suffix.get(lang, suffix["en"])
 
-    return PipelineResult(
-        success=sent,
-        message=message,
-        invoice_number=invoice_number,
-        drive_link=None,
-    )
+    return PipelineResult(success=sent, message=message, invoice_number=invoice_number, drive_link=None)
 
 
 async def handle_send_reminder(params: dict) -> PipelineResult:
@@ -278,20 +250,13 @@ async def handle_request_documents(params: dict) -> PipelineResult:
     return await _simple_pipeline("request_documents", "request_documents", params, lang)
 
 
-# ── Simple pipeline (no PDF) ──────────────────────────────────
-
 async def _simple_pipeline(email_action: str, tool_name: str, params: dict, lang: str) -> PipelineResult:
     try:
         email = draft_email(email_action, params)
     except Exception as exc:
-        log.error(f"Email draft failed: {exc}", exc_info=True)
         return PipelineResult(success=False, message=_err(lang), error=str(exc))
 
-    sent = await _send_via_sendmail_skill(
-        to=email.to,
-        subject=email.subject,
-        body=email.body,
-    )
+    sent = await _send_via_sendmail_skill(to=email.to, subject=email.subject, body=email.body)
 
     tmpl = SUCCESS_MESSAGES.get(tool_name, {}).get(lang, f"Done. Email sent to {params.get('client_name','client')}.")
     message = tmpl.format(client_name=params.get("client_name", "client"))

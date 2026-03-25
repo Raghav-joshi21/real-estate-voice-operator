@@ -173,3 +173,12 @@ async def sse_events():
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "re-voice-operator"}
+
+
+# ── GET /api/dashboard/state  ─────────────────────────────────
+
+@app.get("/api/dashboard/state")
+async def dashboard_state():
+    """Return current dashboard stats."""
+    from dashboard.events import get_stats
+    return JSONResponse(get_stats())

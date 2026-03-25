@@ -3,372 +3,468 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Operator — Live Pipeline</title>
+<title>Sonic Ledger — Live Dashboard</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #0F172A;
+  --bg-card: #1E293B;
+  --bg-card-active: #1a3a2a;
+  --border: #334155;
+  --text: #E2E8F0;
+  --text-dim: #94A3B8;
+  --green: #10B981;
+  --green-dim: #065F46;
+  --green-glow: rgba(16, 185, 129, 0.15);
+  --blue: #3B82F6;
+  --red: #EF4444;
+  --yellow: #F59E0B;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+}
 
-  body {
-    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-    background: #0a0a1a;
-    color: #e0e0e0;
-    min-height: 100vh;
-    padding: 2rem;
-  }
+/* ── Layout ─────────────────────────────────── */
+.layout {
+  display: grid;
+  grid-template-columns: 220px 1fr 1fr;
+  grid-template-rows: 56px 1fr 48px;
+  height: 100vh;
+}
 
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid #1a1a3e;
-  }
+/* ── Top bar ────────────────────────────────── */
+.topbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.topbar h1 { font-size: 16px; color: var(--green); letter-spacing: 2px; }
+.topbar .nav { display: flex; gap: 24px; }
+.topbar .nav a {
+  color: var(--text-dim); text-decoration: none; font-size: 13px;
+  padding: 4px 0; border-bottom: 2px solid transparent;
+}
+.topbar .nav a.active { color: var(--text); border-bottom-color: var(--green); }
+.status-badge {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--green-dim); padding: 4px 12px; border-radius: 12px;
+  font-size: 12px; color: var(--green);
+}
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
 
-  .header h1 {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: #fff;
-  }
+/* ── Sidebar ────────────────────────────────── */
+.sidebar {
+  border-right: 1px solid var(--border);
+  padding: 20px 16px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.sidebar .label { font-size: 11px; color: var(--green); letter-spacing: 1px; margin-bottom: 8px; }
+.sidebar a {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 8px;
+  color: var(--text-dim); text-decoration: none; font-size: 13px;
+}
+.sidebar a.active { background: var(--green-dim); color: var(--green); }
+.sidebar a svg { width: 18px; height: 18px; }
 
-  .header h1 span { color: #e63946; }
+/* ── Transcript panel ───────────────────────── */
+.transcript-panel {
+  padding: 20px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+}
+.call-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 16px;
+}
+.call-header h2 { font-size: 14px; color: var(--text-dim); }
+.call-status {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--green);
+}
+.call-number { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+.call-timer { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
+.waveform {
+  display: flex; align-items: center; justify-content: center;
+  gap: 3px; height: 40px; margin-bottom: 20px;
+}
+.waveform .bar {
+  width: 4px; border-radius: 2px; background: var(--green);
+  animation: wave 1.2s ease-in-out infinite;
+}
+.waveform .bar:nth-child(2) { animation-delay: 0.1s; }
+.waveform .bar:nth-child(3) { animation-delay: 0.2s; }
+.waveform .bar:nth-child(4) { animation-delay: 0.3s; }
+.waveform .bar:nth-child(5) { animation-delay: 0.4s; }
+@keyframes wave {
+  0%, 100% { height: 8px; }
+  50% { height: 32px; }
+}
+.transcript-lines { display: flex; flex-direction: column; gap: 12px; }
+.t-line { font-size: 13px; line-height: 1.5; }
+.t-line .t-time { color: var(--text-dim); font-size: 11px; margin-right: 8px; }
+.t-line .t-role { font-weight: 700; }
+.t-line .t-role.operator { color: var(--green); }
+.t-line .t-role.client { color: var(--blue); }
+.t-line .t-system { color: var(--text-dim); font-style: italic; }
 
-  .status-dot {
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    display: inline-block;
-    margin-right: 8px;
-    background: #666;
-  }
-  .status-dot.connected { background: #22c55e; animation: pulse 2s infinite; }
-  .status-dot.disconnected { background: #e63946; }
+/* ── Pipeline panel ─────────────────────────── */
+.pipeline-panel {
+  padding: 20px;
+  overflow-y: auto;
+}
+.pipeline-panel h2 { font-size: 18px; margin-bottom: 4px; }
+.pipeline-panel .subtitle { font-size: 13px; color: var(--text-dim); margin-bottom: 20px; }
+.pipeline-steps { display: flex; flex-direction: column; gap: 12px; }
 
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-  }
+.step-card {
+  display: flex; align-items: flex-start; gap: 14px;
+  padding: 14px 16px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--bg-card);
+  transition: all 0.3s ease;
+}
+.step-card.active {
+  border-color: var(--green);
+  background: var(--bg-card-active);
+  box-shadow: 0 0 20px var(--green-glow);
+}
+.step-card.done { border-color: var(--green-dim); }
+.step-card.waiting {
+  border-color: var(--yellow);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.1);
+}
+.step-card.error { border-color: var(--red); }
 
-  .grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
-    max-width: 1400px;
-  }
+.step-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex-shrink: 0;
+  background: var(--border);
+}
+.step-card.active .step-icon { background: var(--green-dim); }
+.step-card.done .step-icon { background: var(--green-dim); }
+.step-card.waiting .step-icon { background: rgba(245, 158, 11, 0.2); }
 
-  .panel {
-    background: #111128;
-    border: 1px solid #1a1a3e;
-    border-radius: 12px;
-    padding: 1.5rem;
-  }
+.step-content { flex: 1; min-width: 0; }
+.step-label { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.step-card.active .step-label { color: var(--green); }
+.step-card.waiting .step-label { color: var(--yellow); }
+.step-detail { font-size: 12px; color: var(--text-dim); margin-top: 4px; word-break: break-all; }
+.step-time { font-size: 11px; color: var(--text-dim); text-align: right; flex-shrink: 0; }
+.step-duration { font-size: 11px; color: var(--green); }
 
-  .panel-title {
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    color: #e63946;
-    margin-bottom: 1rem;
-  }
+/* Confirmation card */
+.confirm-box {
+  margin-top: 10px; padding: 12px;
+  background: rgba(245, 158, 11, 0.08); border-radius: 8px;
+}
+.confirm-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; }
+.confirm-total { font-size: 22px; font-weight: 700; color: var(--text); }
+.confirm-buttons { display: flex; gap: 10px; margin-top: 10px; }
+.confirm-buttons button {
+  flex: 1; padding: 10px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; cursor: pointer;
+  font-family: inherit; font-weight: 600;
+}
+.btn-approve { background: var(--green-dim); color: var(--green); border-color: var(--green); }
+.btn-edit { background: var(--bg-card); color: var(--text-dim); }
 
-  /* Transcript */
-  #transcript-area {
-    min-height: 80px;
-    font-size: 1.2rem;
-    color: #fff;
-    line-height: 1.6;
-  }
-  #transcript-area .user { color: #60a5fa; }
-  #transcript-area .assistant { color: #a78bfa; }
-  #transcript-area .label { color: #666; font-size: 0.8rem; margin-right: 0.5rem; }
+/* Notion notification */
+.notion-toast {
+  position: fixed; top: 70px; right: 24px;
+  background: var(--bg-card); border: 1px solid var(--blue);
+  border-radius: 10px; padding: 14px 18px;
+  font-size: 13px; z-index: 100;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.2);
+  animation: slideIn 0.3s ease;
+  max-width: 320px;
+}
+.notion-toast .nt-title { color: var(--blue); font-weight: 600; margin-bottom: 4px; }
+.notion-toast .nt-detail { color: var(--text-dim); }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
-  /* Pipeline steps */
-  .step {
-    display: flex;
-    align-items: flex-start;
-    padding: 0.6rem 0;
-    border-bottom: 1px solid #1a1a2e;
-    gap: 0.75rem;
-  }
-  .step:last-child { border-bottom: none; }
-
-  .step-icon {
-    width: 28px; height: 28px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.8rem;
-    flex-shrink: 0;
-    margin-top: 2px;
-  }
-  .step-icon.pending { background: #1a1a3e; color: #444; }
-  .step-icon.running { background: #1a1a3e; color: #facc15; animation: spin 1s linear infinite; }
-  .step-icon.done { background: #166534; color: #22c55e; }
-  .step-icon.waiting { background: #78350f; color: #facc15; }
-  .step-icon.error { background: #7f1d1d; color: #ef4444; }
-
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-
-  .step-body { flex: 1; }
-  .step-label { font-size: 0.9rem; color: #e0e0e0; }
-  .step-detail { font-size: 0.75rem; color: #888; margin-top: 2px; }
-  .step-time { font-size: 0.7rem; color: #555; white-space: nowrap; margin-top: 4px; }
-
-  /* Invoice preview */
-  #invoice-preview {
-    display: none;
-    background: #0f0f24;
-    border: 1px solid #e63946;
-    border-radius: 8px;
-    padding: 1.2rem;
-    margin-top: 1rem;
-  }
-  #invoice-preview.visible { display: block; animation: slideIn 0.3s ease-out; }
-
-  @keyframes slideIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  .invoice-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 0.3rem 0;
-  }
-  .invoice-row .label { color: #888; }
-  .invoice-row .value { color: #fff; font-weight: 600; }
-  .invoice-row .value.big { font-size: 1.3rem; color: #22c55e; }
-
-  /* Response */
-  #response-area {
-    min-height: 60px;
-    font-size: 1rem;
-    color: #a78bfa;
-    line-height: 1.5;
-    font-style: italic;
-  }
-
-  .full-width { grid-column: 1 / -1; }
-
-  /* Connection banner */
-  .conn-banner {
-    position: fixed;
-    top: 0; left: 0; right: 0;
-    background: #e63946;
-    color: #fff;
-    text-align: center;
-    padding: 6px;
-    font-size: 0.8rem;
-    display: none;
-    z-index: 100;
-  }
-  .conn-banner.show { display: block; }
+/* ── Bottom bar ─────────────────────────────── */
+.bottombar {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px; border-top: 1px solid var(--border);
+  font-size: 12px; color: var(--text-dim);
+}
+.bottombar .stats { display: flex; gap: 32px; }
+.stat-label { color: var(--text-dim); margin-right: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-value { color: var(--green); font-weight: 600; }
+.stat-value.amount { color: var(--green); }
 </style>
 </head>
 <body>
+<div class="layout">
+  <!-- Top bar -->
+  <div class="topbar">
+    <h1>SONIC LEDGER</h1>
+    <div class="nav">
+      <a href="#" class="active">Live Stream</a>
+      <a href="#">Analytics</a>
+      <a href="#">Invoices</a>
+    </div>
+    <div class="status-badge"><div class="status-dot"></div> SYSTEM ONLINE</div>
+  </div>
 
-<div class="conn-banner" id="conn-banner">Reconnecting to server...</div>
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="label">THE OBSIDIAN CONDUCTOR</div>
+    <a href="#" class="active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+      Live Stream
+    </a>
+    <a href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Analytics
+    </a>
+    <a href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      Invoices
+    </a>
+    <a href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Settings
+    </a>
+  </div>
 
-<div class="header">
-  <h1><span>OPERATOR</span> — Live Pipeline</h1>
-  <div>
-    <span class="status-dot" id="status-dot"></span>
-    <span id="status-text" style="font-size: 0.8rem; color: #666;">connecting...</span>
+  <!-- Transcript panel -->
+  <div class="transcript-panel">
+    <div class="call-header">
+      <div>
+        <h2>ACTIVE CALL</h2>
+        <div class="call-number" id="callNumber">Waiting...</div>
+        <div class="call-status"><div class="status-dot"></div> <span id="callStatus">STANDBY</span></div>
+      </div>
+      <div class="call-timer" id="callTimer">00:00</div>
+    </div>
+    <div class="waveform" id="waveform" style="display:none">
+      <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+    </div>
+    <div class="transcript-lines" id="transcript"></div>
+  </div>
+
+  <!-- Pipeline panel -->
+  <div class="pipeline-panel">
+    <h2>Invoice Pipeline</h2>
+    <div class="subtitle" id="pipelineSubtitle">Waiting for incoming call...</div>
+    <div class="pipeline-steps" id="pipelineSteps"></div>
+  </div>
+
+  <!-- Bottom bar -->
+  <div class="bottombar">
+    <div class="stats">
+      <div><span class="stat-label">Total invoices today:</span> <span class="stat-value" id="statInvoices">0</span></div>
+      <div><span class="stat-label">Total amount:</span> <span class="stat-value amount" id="statAmount">0.00 EUR</span></div>
+      <div><span class="stat-label">Last invoice:</span> <span class="stat-value" id="statLast">—</span></div>
+    </div>
+    <div class="stats">
+      <div><span class="stat-label">Active calls:</span> <span class="stat-value" id="statActive">0</span></div>
+      <div><span class="stat-label">Completed:</span> <span class="stat-value" id="statCompleted">0</span></div>
+    </div>
   </div>
 </div>
 
-<div class="grid">
-  <!-- Transcript -->
-  <div class="panel full-width">
-    <div class="panel-title">Conversation</div>
-    <div id="transcript-area">
-      <span style="color: #444;">Waiting for input...</span>
-    </div>
-  </div>
-
-  <!-- Pipeline Steps -->
-  <div class="panel">
-    <div class="panel-title">Pipeline Steps</div>
-    <div id="steps-area">
-      <!-- Steps are added dynamically -->
-    </div>
-  </div>
-
-  <!-- Right column: Invoice + Response -->
-  <div>
-    <div class="panel">
-      <div class="panel-title">Operator Response</div>
-      <div id="response-area">
-        <span style="color: #444;">Waiting...</span>
-      </div>
-    </div>
-
-    <div id="invoice-preview">
-      <div class="panel-title" style="color: #e63946;">Invoice Generated</div>
-      <div class="invoice-row">
-        <span class="label">Number</span>
-        <span class="value" id="inv-number">—</span>
-      </div>
-      <div class="invoice-row">
-        <span class="label">Client</span>
-        <span class="value" id="inv-client">—</span>
-      </div>
-      <div class="invoice-row">
-        <span class="label">Total</span>
-        <span class="value big" id="inv-total">—</span>
-      </div>
-      <div class="invoice-row" id="inv-link-row" style="display:none;">
-        <span class="label">PDF</span>
-        <a class="value" id="inv-link" href="#" target="_blank" style="color: #60a5fa; text-decoration: none;">Open</a>
-      </div>
-    </div>
-  </div>
-</div>
+<!-- Notion toast container -->
+<div id="notionToasts"></div>
 
 <script>
-const stepsArea = document.getElementById('steps-area');
-const transcriptArea = document.getElementById('transcript-area');
-const responseArea = document.getElementById('response-area');
-const statusDot = document.getElementById('status-dot');
-const statusText = document.getElementById('status-text');
-const connBanner = document.getElementById('conn-banner');
-const invoicePreview = document.getElementById('invoice-preview');
+const ICONS = {
+  parse: '🧠', lookup_client: '🏢', lookup_service: '📋', create_client: '➕',
+  create_invoice: '📄', confirm: '✓', pdf_generation: '📑',
+  email_draft: '✉️', email_send: '📨', telegram_notify: '📱',
+};
 
-let firstMessage = true;
-let stepElements = {};
+const stepCards = {};
+let callStart = null;
+let timerInterval = null;
 
-function setConnected(connected) {
-  statusDot.className = 'status-dot ' + (connected ? 'connected' : 'disconnected');
-  statusText.textContent = connected ? 'live' : 'disconnected';
-  connBanner.className = 'conn-banner' + (connected ? '' : ' show');
-}
+// ── SSE connection ──────────────────────────────
+const evtSource = new EventSource('/api/events');
 
-function addStep(id, label, status, detail, timeMs) {
-  let el = stepElements[id];
-  if (!el) {
-    el = document.createElement('div');
-    el.className = 'step';
-    el.innerHTML = `
-      <div class="step-icon pending" id="icon-${id}">&#9675;</div>
-      <div class="step-body">
-        <div class="step-label" id="label-${id}"></div>
-        <div class="step-detail" id="detail-${id}"></div>
-      </div>
-      <div class="step-time" id="time-${id}"></div>
-    `;
-    stepsArea.appendChild(el);
-    stepElements[id] = el;
-  }
+evtSource.onmessage = (e) => {
+  const evt = JSON.parse(e.data);
+  handleEvent(evt);
+};
 
-  const icon = document.getElementById('icon-' + id);
-  const labelEl = document.getElementById('label-' + id);
-  const detailEl = document.getElementById('detail-' + id);
-  const timeEl = document.getElementById('time-' + id);
-
-  labelEl.textContent = label;
-  if (detail) detailEl.textContent = detail;
-
-  if (status === 'running') {
-    icon.className = 'step-icon running';
-    icon.innerHTML = '&#8987;';
-  } else if (status === 'done') {
-    icon.className = 'step-icon done';
-    icon.innerHTML = '&#10003;';
-    if (timeMs) timeEl.textContent = (timeMs / 1000).toFixed(1) + 's';
-  } else if (status === 'waiting') {
-    icon.className = 'step-icon waiting';
-    icon.innerHTML = '&#8986;';
-  } else if (status === 'error') {
-    icon.className = 'step-icon error';
-    icon.innerHTML = '&#10007;';
-  }
-}
-
-function appendTranscript(role, text) {
-  if (firstMessage) {
-    transcriptArea.innerHTML = '';
-    firstMessage = false;
-  }
-  const div = document.createElement('div');
-  div.style.marginBottom = '0.5rem';
-  const label = role === 'user' ? 'YOU' : 'OPERATOR';
-  div.innerHTML = `<span class="label">${label}</span><span class="${role}">${escapeHtml(text)}</span>`;
-  transcriptArea.appendChild(div);
-  transcriptArea.scrollTop = transcriptArea.scrollHeight;
-}
-
-function escapeHtml(s) {
-  const d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML;
-}
+evtSource.onerror = () => {
+  document.querySelector('.status-dot').style.background = '#EF4444';
+  document.getElementById('callStatus').textContent = 'RECONNECTING...';
+};
 
 function handleEvent(evt) {
-  const d = JSON.parse(evt.data);
-
-  switch (d.type) {
-    case 'transcript':
-      appendTranscript('user', d.text);
-      break;
-
-    case 'step_start':
-      addStep(d.step, d.label, 'running', d.detail);
-      break;
-
-    case 'step_done':
-      addStep(d.step, d.label, 'done', d.detail, d.duration_ms);
-      break;
-
-    case 'step_waiting':
-      addStep(d.step, d.label, 'waiting', d.detail);
-      break;
-
-    case 'response':
-      responseArea.textContent = d.text;
-      appendTranscript('assistant', d.text);
-      break;
-
-    case 'invoice':
-      document.getElementById('inv-number').textContent = d.invoice_number;
-      document.getElementById('inv-client').textContent = d.client;
-      document.getElementById('inv-total').textContent = d.total || '—';
-      if (d.drive_link && !d.drive_link.startsWith('file://')) {
-        document.getElementById('inv-link').href = d.drive_link;
-        document.getElementById('inv-link-row').style.display = 'flex';
-      }
-      invoicePreview.className = 'visible';
-      break;
-
-    case 'error':
-      addStep('error', 'Error', 'error', d.message);
-      break;
-
-    case 'reset':
-      stepsArea.innerHTML = '';
-      stepElements = {};
-      transcriptArea.innerHTML = '<span style="color: #444;">Waiting for input...</span>';
-      responseArea.innerHTML = '<span style="color: #444;">Waiting...</span>';
-      invoicePreview.className = '';
-      firstMessage = true;
-      break;
+  switch (evt.type) {
+    case 'transcript': onTranscript(evt); break;
+    case 'response': onResponse(evt); break;
+    case 'step_start': onStepStart(evt); break;
+    case 'step_done': onStepDone(evt); break;
+    case 'step_waiting': onStepWaiting(evt); break;
+    case 'invoice': onInvoice(evt); break;
+    case 'notion_update': onNotionUpdate(evt); break;
+    case 'error': onError(evt); break;
+    case 'reset': onReset(); break;
   }
 }
 
-function connect() {
-  const es = new EventSource('/api/events');
-
-  es.onopen = () => setConnected(true);
-  es.onmessage = handleEvent;
-  es.onerror = () => {
-    setConnected(false);
-    es.close();
-    setTimeout(connect, 2000);
-  };
+// ── Transcript ──────────────────────────────────
+function onTranscript(evt) {
+  if (!callStart) startCall(evt.session_id);
+  const el = document.getElementById('transcript');
+  const lines = evt.text.split('\n').filter(l => l.trim());
+  lines.forEach(line => {
+    const div = document.createElement('div');
+    div.className = 't-line';
+    const time = new Date(evt.ts * 1000).toLocaleTimeString('lv-LV');
+    const match = line.match(/^(USER|AGENT|ASSISTANT|SYSTEM):\s*(.*)/i);
+    if (match) {
+      const role = match[1].toUpperCase();
+      const cls = role === 'USER' ? 'client' : 'operator';
+      const label = role === 'USER' ? 'KLIENTS' : 'OPERATORS';
+      div.innerHTML = `<span class="t-time">${time}</span> <span class="t-role ${cls}">${label}:</span> ${match[2]}`;
+    } else {
+      div.innerHTML = `<span class="t-time">${time}</span> <span class="t-system">${line}</span>`;
+    }
+    el.appendChild(div);
+  });
+  el.scrollTop = el.scrollHeight;
 }
 
-connect();
+function onResponse(evt) {
+  const el = document.getElementById('transcript');
+  const div = document.createElement('div');
+  div.className = 't-line';
+  const time = new Date(evt.ts * 1000).toLocaleTimeString('lv-LV');
+  div.innerHTML = `<span class="t-time">${time}</span> <span class="t-role operator">OPERATORS:</span> ${evt.text}`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── Pipeline steps ──────────────────────────────
+function onStepStart(evt) {
+  addOrUpdateStep(evt.step, 'active', evt.label, evt.detail, evt.ts);
+  document.getElementById('pipelineSubtitle').textContent = `Processing: ${evt.label}`;
+}
+
+function onStepDone(evt) {
+  addOrUpdateStep(evt.step, 'done', evt.label, evt.detail, evt.ts, evt.duration_ms);
+}
+
+function onStepWaiting(evt) {
+  addOrUpdateStep(evt.step, 'waiting', evt.label, evt.detail, evt.ts);
+  document.getElementById('pipelineSubtitle').textContent = 'Awaiting confirmation...';
+}
+
+function addOrUpdateStep(step, status, label, detail, ts, durationMs) {
+  const container = document.getElementById('pipelineSteps');
+  let card = stepCards[step];
+
+  if (!card) {
+    card = document.createElement('div');
+    card.className = 'step-card';
+    card.innerHTML = `
+      <div class="step-icon">${ICONS[step] || '⚡'}</div>
+      <div class="step-content">
+        <div class="step-label"></div>
+        <div class="step-detail"></div>
+      </div>
+      <div class="step-meta">
+        <div class="step-time"></div>
+        <div class="step-duration"></div>
+      </div>
+    `;
+    container.appendChild(card);
+    stepCards[step] = card;
+  }
+
+  card.className = `step-card ${status}`;
+  card.querySelector('.step-label').textContent = label;
+  if (detail) card.querySelector('.step-detail').textContent = detail;
+  if (ts) card.querySelector('.step-time').textContent = new Date(ts * 1000).toLocaleTimeString('lv-LV');
+  if (durationMs) card.querySelector('.step-duration').textContent = `${(durationMs/1000).toFixed(1)}s`;
+
+  card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ── Invoice ─────────────────────────────────────
+function onInvoice(evt) {
+  document.getElementById('pipelineSubtitle').textContent = `Invoice ${evt.invoice_number} completed`;
+  document.getElementById('statLast').textContent = `${evt.invoice_number}`;
+  updateStats();
+}
+
+// ── Notion update ───────────────────────────────
+function onNotionUpdate(evt) {
+  const container = document.getElementById('notionToasts');
+  const toast = document.createElement('div');
+  toast.className = 'notion-toast';
+  toast.innerHTML = `
+    <div class="nt-title">📓 New ${evt.entity_type} added to Notion</div>
+    <div class="nt-detail">${evt.name}${evt.details?.email ? ' — ' + evt.details.email : ''}</div>
+  `;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 8000);
+}
+
+// ── Error ───────────────────────────────────────
+function onError(evt) {
+  addOrUpdateStep('error_' + Date.now(), 'error', 'Error', evt.message, evt.ts);
+}
+
+// ── Reset ───────────────────────────────────────
+function onReset() {
+  document.getElementById('transcript').innerHTML = '';
+  document.getElementById('pipelineSteps').innerHTML = '';
+  document.getElementById('pipelineSubtitle').textContent = 'Waiting for incoming call...';
+  document.getElementById('callNumber').textContent = 'Waiting...';
+  document.getElementById('callStatus').textContent = 'STANDBY';
+  document.getElementById('waveform').style.display = 'none';
+  Object.keys(stepCards).forEach(k => delete stepCards[k]);
+  callStart = null;
+  if (timerInterval) clearInterval(timerInterval);
+}
+
+// ── Call management ─────────────────────────────
+function startCall(sessionId) {
+  callStart = Date.now();
+  document.getElementById('callNumber').textContent = sessionId.substring(0, 16);
+  document.getElementById('callStatus').textContent = 'CONNECTED';
+  document.getElementById('waveform').style.display = 'flex';
+  timerInterval = setInterval(() => {
+    const s = Math.floor((Date.now() - callStart) / 1000);
+    const m = Math.floor(s / 60);
+    document.getElementById('callTimer').textContent =
+      `${String(m).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+  }, 1000);
+}
+
+// ── Stats polling ───────────────────────────────
+async function updateStats() {
+  try {
+    const r = await fetch('/api/dashboard/state');
+    const d = await r.json();
+    document.getElementById('statInvoices').textContent = d.invoices_today || 0;
+    document.getElementById('statAmount').textContent = `${(d.total_amount_today || 0).toLocaleString('lv-LV', {minimumFractionDigits: 2})} EUR`;
+    document.getElementById('statActive').textContent = d.active_calls || 0;
+    document.getElementById('statCompleted').textContent = d.completed || 0;
+    if (d.last_invoice) {
+      document.getElementById('statLast').textContent = d.last_invoice.number;
+    }
+  } catch(e) {}
+}
+
+// Initial stats load + periodic refresh
+updateStats();
+setInterval(updateStats, 10000);
 </script>
 </body>
 </html>

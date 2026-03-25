@@ -75,3 +75,44 @@ def emit_error(message: str) -> None:
 
 def emit_reset() -> None:
     _broadcast("reset", {})
+
+
+# ── Stats tracking (in-memory) ────────────────────────────────
+_stats = {
+    "invoices_today": 0,
+    "total_amount_today": 0.0,
+    "last_invoice": None,
+    "active_calls": 0,
+    "completed": 0,
+}
+
+
+def get_stats() -> dict:
+    return dict(_stats)
+
+
+def track_invoice(invoice_number: str, amount: float, client: str) -> None:
+    _stats["invoices_today"] += 1
+    _stats["total_amount_today"] += amount
+    _stats["last_invoice"] = {"number": invoice_number, "client": client, "ts": time.time()}
+    _stats["completed"] += 1
+
+
+def track_call_start() -> None:
+    _stats["active_calls"] += 1
+
+
+def track_call_end() -> None:
+    _stats["active_calls"] = max(0, _stats["active_calls"] - 1)
+
+
+# ── Notion update notification ────────────────────────────────
+
+def emit_notion_update(action: str, entity_type: str, name: str, details: dict = None) -> None:
+    """Notify dashboard of a Notion database change."""
+    _broadcast("notion_update", {
+        "action": action,       # "created", "updated"
+        "entity_type": entity_type,  # "client", "service"
+        "name": name,
+        "details": details or {},
+    })
